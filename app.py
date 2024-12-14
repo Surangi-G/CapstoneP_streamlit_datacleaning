@@ -1,7 +1,5 @@
 
 
-
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -38,17 +36,6 @@ if uploaded_file:
     st.write("### Missing Values in Each Column")
     st.write(df.isnull().sum())
 
-    # Validation 2: Check numeric columns
-    numeric_columns = ['pH', 'TC %', 'TN %', 'Olsen P', 'AMN', 'BD']
-    non_numeric_values = {}
-    for col in numeric_columns:
-        if col in df.columns:
-            invalid_values = df[col].apply(lambda x: isinstance(x, str)).sum()
-            if invalid_values > 0:
-                non_numeric_values[col] = invalid_values
-    if non_numeric_values:
-        st.warning(f"The following numeric columns contain non-numeric values: {non_numeric_values}")
-
     # Step 1: Handle Missing Values in Critical Columns
     critical_columns = ['pH', 'TC %', 'TN %', 'Olsen P', 'AMN', 'BD']
     df_cleaned = df.dropna(subset=critical_columns, how='any')
@@ -78,12 +65,6 @@ if uploaded_file:
     st.write("### Assigned Periods")
     st.dataframe(df_cleaned[['Year', 'Period']].head())
 
-    # Validation 3: Check unassigned periods
-    unassigned_periods = df_cleaned[df_cleaned['Period'] == 'Unknown']
-    if not unassigned_periods.empty:
-        st.warning(f"{len(unassigned_periods)} rows have an unassigned period. Please verify the year range.")
-        st.dataframe(unassigned_periods)
-
     # Step 5: Handle "<" Values in Trace Element Columns
     trace_elements = ['As', 'Cd', 'Cr', 'Cu', 'Ni', 'Pb', 'Zn']
     for column in trace_elements:
@@ -94,17 +75,10 @@ if uploaded_file:
     st.write("### Updated Columns After Handling '<' Values")
     st.dataframe(df_cleaned[trace_elements].head())
 
-    # Step 6: Select Latest Sample for Each Site-Period Combination
-    df_latest_samples = df_cleaned.loc[
-        df_cleaned.groupby(['Site Num', 'Period'])['Sample Count'].idxmax()
-    ].reset_index(drop=True)
-    st.write("### Latest Sample for Each Site-Period Combination")
-    st.dataframe(df_latest_samples.head())
-
-    # Step 7: Impute Missing Values Using MissForest
+    # Step 6: Impute Missing Values Using MissForest
     st.write("### Imputation Using MissForest")
     non_predictive_columns = ['Site No.1', 'Site Num', 'Year', 'Sample Count', 'Period']
-    df_for_imputation = df_latest_samples.drop(columns=non_predictive_columns, errors="ignore")
+    df_for_imputation = df_cleaned.drop(columns=non_predictive_columns, errors="ignore")
     categorical_columns = df_for_imputation.select_dtypes(include=['object', 'category']).columns.tolist()
     df_encoded = pd.get_dummies(df_for_imputation, columns=categorical_columns, drop_first=False)
     imputer = MissForest()
@@ -114,11 +88,11 @@ if uploaded_file:
         encoded_columns = [c for c in df_encoded.columns if c.startswith(f"{col}_")]
         df_imputed[col] = df_imputed[encoded_columns].idxmax(axis=1).str[len(col) + 1:]
         df_imputed = df_imputed.drop(columns=encoded_columns)
-    df_final = pd.concat([df_latest_samples[non_predictive_columns].reset_index(drop=True), df_imputed], axis=1)
+    df_final = pd.concat([df_cleaned[non_predictive_columns].reset_index(drop=True), df_imputed], axis=1)
     st.write("### Dataset After Imputation")
     st.dataframe(df_final.head())
 
-    # Step 8: Perform KS Test
+    # Step 7: Perform KS Test
     st.write("### Kolmogorov-Smirnov Test Results")
     ks_results = {}
     for column in trace_elements:
@@ -128,12 +102,7 @@ if uploaded_file:
     ks_results_df = pd.DataFrame(ks_results).T
     st.write(ks_results_df)
 
-    # Validation 4: Highlight significant KS test results
-    significant_differences = [col for col, result in ks_results.items() if result['p-value'] < 0.05]
-    if significant_differences:
-        st.warning(f"Significant distribution differences detected in: {significant_differences}")
-
-    # Step 9: Download Cleaned Dataset
+    # Step 8: Download Cleaned Dataset
     st.write("### Download Cleaned Dataset")
     cleaned_file = df_final.to_excel(index=False, engine="openpyxl")
     st.download_button(
@@ -145,3 +114,4 @@ if uploaded_file:
 
 else:
     st.write("Please upload a dataset to start the cleaning process.")
+
