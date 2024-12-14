@@ -6,3 +6,4 @@ seaborn
 scipy
 missingpy
 openpyxl
+scikit-learn
